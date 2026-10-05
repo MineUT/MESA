@@ -143,7 +143,7 @@ th,td{padding:10px 6px;font-size:.85rem}
 
 <script>
 // ====== تنظیمات ======
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz7rPiIscvzX56iNhqOTGzBxzH-xjnZ0gEBYalm7O7Dt8HeUkiNfg5OhbzrQQcKKMRt/exec"; // آدرس Web App گوگل اپ اسکریپت
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz7rPiIscvzX56iNhqOTGzBxzH-xjnZ0gEBYalm7O7Dt8HeUkiNfg5OhbzrQQcKKMRt/exec"; // ⚠️ اینو با URL جدید Deploy عوض کن
 const SESSIONS = [
   {name:"اکتشاف",     icon:"🧭", day:"", time:"", place:""},
   {name:"استخراج",    icon:"🚚", day:"", time:"", place:""},
@@ -151,9 +151,9 @@ const SESSIONS = [
   {name:"فرآوری",     icon:"⚙️", day:"", time:"", place:""},
   {name:"محیط زیست",  icon:"🌿", day:"", time:"", place:""}
 ];
-// روز، ساعت و مکان هر جلسه رو بین "" بنویس
 // ======================
 const $ = id => document.getElementById(id);
+
 $("schedule").innerHTML = SESSIONS.map(s=>`<tr><td>${s.icon} ${s.name}</td><td>${s.day}</td><td>${s.time}</td><td>${s.place}</td></tr>`).join("");
 $("ddPanel").innerHTML = SESSIONS.map(s=>`<label class="opt"><input type="checkbox" value="${s.name}"><span>${s.icon} ${s.name}</span></label>`).join("");
 
@@ -180,43 +180,66 @@ function validate(){
   return ok;
 }
 
-$("form").addEventListener("submit",async e=>{
+$("form").addEventListener("submit", async e => {
   e.preventDefault();
-  if($("hp").value||!validate())return;
-  const data={firstName:$("fn").value.trim(),lastName:$("ln").value.trim(),studentId:fa2en($("sid").value.trim()),email:$("em").value.trim(),sessions:boxes()};
-  const btn=$("btn"); btn.disabled=true; btn.textContent="در حال ثبت… ⏳";
-  try{
-    let result=null;
-    if(SCRIPT_URL.startsWith("PASTE")){ console.warn("SCRIPT_URL تنظیم نشده؛ حالت نمایشی."); }
-    else{
-      try{
-        // درخواست ساده (بدون preflight) و خواندن پاسخ سرور
-        const res=await fetch(SCRIPT_URL,{method:"POST",body:JSON.stringify(data)});
-        result=await res.json();
-      }catch(readErr){
-        // اگه پاسخ قابل خوندن نبود، دوباره بدون خوندن پاسخ می‌فرستیم
-        // (اگه بار اول ثبت شده باشه، سرور به‌خاطر ایمیل تکراری ردش می‌کنه)
-        await fetch(SCRIPT_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(data)});
-      }
+  if ($("hp").value || !validate()) return;
+
+  const data = {
+    firstName: $("fn").value.trim(),
+    lastName:  $("ln").value.trim(),
+    studentId: fa2en($("sid").value.trim()),
+    email:     $("em").value.trim(),
+    sessions:  boxes()
+  };
+
+  const btn = $("btn");
+  btn.disabled = true;
+  btn.textContent = "در حال ثبت… ⏳";
+
+  try {
+    // ⚠️ مهم: Content-Type باید text/plain باشه تا preflight فرستاده نشه
+    const res = await fetch(SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(data),
+      redirect: "follow"
+    });
+
+    let result = null;
+    try {
+      result = await res.json();
+    } catch (parseErr) {
+      // اگه پاسخ JSON نبود، احتمالاً CORS یا خطای شبکه
+      console.warn("Could not parse response as JSON:", parseErr);
     }
-    if(result && result.success===false){
-      if(result.code==="DUPLICATE_EMAIL"){
-        $("e-em").textContent="این ایمیل قبلاً ثبت‌نام کرده 📧 هر ایمیل فقط یک بار می‌تونه ثبت‌نام کنه.";
+
+    if (result && result.success === false) {
+      if (result.code === "DUPLICATE_EMAIL") {
+        $("e-em").textContent = "این ایمیل قبلاً ثبت‌نام کرده 📧 هر ایمیل فقط یک بار می‌تونه ثبت‌نام کنه.";
         $("em").focus();
-      }else{
-        alert(result.message||"مشکلی پیش اومد 😕 لطفاً دوباره تلاش کن.");
+      } else {
+        alert(result.message || "مشکلی پیش اومد 😕 لطفاً دوباره تلاش کن.");
       }
       return;
     }
-    $("mTitle").textContent=`${data.firstName} عزیز، ثبت‌نامت انجام شد!`;
-    $("modal").classList.add("show"); $("form").reset(); $("ddPanel").onchange();
-  }catch(err){
-    alert("مشکلی پیش اومد 😕 لطفاً دوباره تلاش کن.");
-  }finally{
-    btn.disabled=false; btn.textContent="ثبت‌نام می‌کنم 🚀";
+
+    // موفقیت
+    $("mTitle").textContent = `${data.firstName} عزیز، ثبت‌نامت انجام شد!`;
+    $("modal").classList.add("show");
+    $("form").reset();
+    $("ddPanel").onchange();
+
+  } catch (err) {
+    console.error("Submit error:", err);
+    alert("مشکلی پیش اومد 😕 لطفاً اتصال اینترنتت رو چک کن و دوباره تلاش کن.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "ثبت‌نام می‌کنم 🚀";
   }
 });
+
 $("em").addEventListener("input",()=>{$("e-em").textContent=""});
+
 document.querySelectorAll(".tile").forEach(t=>t.addEventListener("click",()=>{
   const p=$(t.dataset.target), was=p.classList.contains("open");
   document.querySelectorAll(".panel").forEach(x=>x.classList.remove("open"));
@@ -227,6 +250,7 @@ document.querySelectorAll(".tile").forEach(t=>t.addEventListener("click",()=>{
     setTimeout(()=>(mobile?t:p).scrollIntoView({behavior:"smooth",block:"start"}),60);
   }
 }));
+
 $("close").onclick=()=>$("modal").classList.remove("show");
 </script>
 </body>
