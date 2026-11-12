@@ -123,10 +123,20 @@ button.submit:disabled{opacity:.6;cursor:wait;transform:none}
 
 <script>
 // ====== تنظیمات ======
-// ⚠️ بعد از Deploy کردن Apps Script، آدرس Web app رو اینجا بذار
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwx3ZNc785gSo_AsL1Lx-KaLUyjlGzHgyjuYyH7QOScra6FhR1Rsa7Z1r7UFH80Iv8w/exec";
 // ======================
 const $ = id => document.getElementById(id);
+
+// پاک‌سازی ایمیل: کاراکترهای نامرئی، mailto:، فرمت Name <email> و ...
+function cleanEmail(s){
+  s = String(s).normalize("NFKC")
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF\u00A0]/g,"");
+  const m = s.match(/[^\s<>"'(),;:]+@[^\s<>"'(),;:]+\.[^\s<>"'(),;:]+/);
+  return (m ? m[0] : s.trim()).replace(/\.+$/,"").toLowerCase();
+}
+function tidyEmail(){ $("em").value = cleanEmail($("em").value); }
+$("em").addEventListener("paste",()=>setTimeout(tidyEmail,0));
+$("em").addEventListener("blur",tidyEmail);
 
 ["name","em"].forEach(id=>$(id).addEventListener("input",()=>{$("e-"+id).textContent="";$(id).classList.remove("bad")}));
 
@@ -135,7 +145,7 @@ function validate(){
   const set=(id,m)=>{$("e-"+id).textContent=m;$(id).classList.toggle("bad",!!m);if(m)ok=false};
   const name=$("name").value.trim();
   set("name",name.length>=3&&/\s/.test(name)?"":"نام و نام خانوادگی‌ت رو کامل وارد کن 🙂");
-  set("em",/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test($("em").value.trim())?"":"یه ایمیل معتبر وارد کن 📧");
+  set("em",/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail($("em").value))?"":"یه ایمیل معتبر وارد کن 📧");
   return ok;
 }
 
@@ -143,8 +153,8 @@ $("form").addEventListener("submit", async e => {
   e.preventDefault();
   if ($("hp").value || !validate()) return;
 
-  const fullName = $("name").value.trim().replace(/\s+/g," ");
-  const data = { fullName, email: $("em").value.trim() };
+  const fullName = $("name").value.trim().replace(/[\u00A0\s]+/g," ");
+  const data = { fullName, email: cleanEmail($("em").value) };
 
   const btn = $("btn");
   btn.disabled = true;
@@ -159,16 +169,19 @@ $("form").addEventListener("submit", async e => {
       redirect: "follow"
     });
 
+    const text = await res.text();
     let result = null;
-    try { result = await res.json(); } catch (parseErr) { console.warn("Response is not JSON:", parseErr); }
+    try { result = JSON.parse(text); } catch (parseErr) {
+      console.error("Response is not JSON:", text.slice(0, 300));
+    }
 
-    if (result && result.success === false) {
-      if (result.code === "DUPLICATE_EMAIL") {
+    if (!result || result.success !== true) {
+      if (result && result.code === "DUPLICATE_EMAIL") {
         $("e-em").textContent = "این ایمیل قبلاً ثبت‌نام کرده 📧 هر ایمیل فقط یک بار می‌تونه ثبت‌نام کنه.";
         $("em").classList.add("bad");
         $("em").focus();
       } else {
-        alert(result.message || "مشکلی پیش اومد 😕 لطفاً دوباره تلاش کن.");
+        alert((result && result.message) || "ثبت‌نام انجام نشد 😕 لطفاً دوباره تلاش کن.");
       }
       return;
     }
